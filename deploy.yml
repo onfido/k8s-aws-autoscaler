@@ -1,0 +1,39 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: k8s-aws-autoscaler
+  namespace: kube-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: k8s-aws-autoscaler
+      annotations:
+        scheduler.alpha.kubernetes.io/tolerations: |
+          [
+            {
+              "key": "dedicated",
+              "operator": "Equal",
+              "value": "master",
+              "effect": "NoSchedule"
+            }
+          ]
+    spec:
+      nodeSelector:
+        kubernetes.io/role: master
+      containers:
+      - name: k8s-aws-autoscaler
+        image: onfido/k8s-aws-autoscaler
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        env:
+          - name: INTERVAL
+            value: 120
+          - name: AUTOSCALING
+            value: "30|70|General-ASG;40|60|GPU-ASG"
+          - name: SLACK_HOOK
+            value: SLACK_HOOK
