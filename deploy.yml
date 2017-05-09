@@ -32,7 +32,7 @@ spec:
             memory: 50Mi
         env:
           - name: INTERVAL
-            value: 120
+            value: "120"
           - name: AUTOSCALING
             value: "30|70|General-ASG;40|60|GPU-ASG"
           - name: SLACK_HOOK
