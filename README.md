@@ -18,12 +18,12 @@ This Pod runs in the `kube-system` namespace on k8s master nodes.
 - The ASG(s) in `AUTOSCALING` (env var) must have Instance Protection set to _Protect From Scale In_ so the autoscaler can control which node gets drained+terminated in a scale down event.
 - ASG(s) cannot have `|` or `;` symbols in name(s).
 - The K8s master nodes AWS role policy must allow the following actions:
-  - ```
-  autoscaling:DescribeAutoScalingGroups,
-  autoscaling:SetDesiredCapacity,
-  autoscaling:DetachInstances,
-  ec2:TerminateInstances
-  ```
+```
+autoscaling:DescribeAutoScalingGroups,
+autoscaling:SetDesiredCapacity,
+autoscaling:DetachInstances,
+ec2:TerminateInstances
+```
 
 ### Env vars
 
