@@ -1,6 +1,6 @@
 FROM alpine:3.5
 
-RUN apk add --update curl bash jq python py-pip bc \
+RUN apk add --update curl bash jq python py-pip bc sed \
     && pip install --upgrade pip \
     && pip install awscli \
     && rm -rf /var/cache/apk/*
