@@ -34,6 +34,6 @@ spec:
           - name: INTERVAL
             value: "120"
           - name: AUTOSCALING
-            value: "30|70|General-ASG;40|60|GPU-ASG"
+            value: "30|70|General-ASG|eu-west-1;40|60|GPU-ASG|eu-west-1"
           - name: SLACK_HOOK
             value: SLACK_HOOK

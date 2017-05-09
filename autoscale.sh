@@ -3,6 +3,7 @@
 minRRA=""
 maxRRA=""
 asgName=""
+asgRegion=""
 nodesDesc=""
 
 arePodsPending() {
@@ -63,10 +64,12 @@ notifySlack() {
 }
 
 scaleUp() {
-  currentDesired=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-name $asgName | \
+  currentDesired=$(aws autoscaling describe-auto-scaling-groups \
+    --auto-scaling-group-name $asgName --region $asgRegion | \
     jq '.AutoScalingGroups[].DesiredCapacity')
 
-  aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName --desired-capacity $(expr $currentDesired + 1)
+  aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
+    --desired-capacity $(expr $currentDesired + 1) --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
     notifySlack "Failed to scale up $asgName, hit maximum."
@@ -81,7 +84,7 @@ scaleDown() {
   nodeId=$(echo "$nodesDesc" | grep "ExternalID:" | awk '{print $2}' | head -n1)
 
   aws autoscaling detach-instances --instance-ids $nodeId --auto-scaling-group-name $asgName \
-    --should-decrement-desired-capacity
+    --should-decrement-desired-capacity --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
     notifySlack "Failed to scale down $asgName, hit minimum."
@@ -92,7 +95,7 @@ scaleDown() {
 
   sleep 30
 
-  aws ec2 terminate-instances --instance-ids $nodeId
+  aws ec2 terminate-instances --instance-ids $nodeId --region $asgRegion
 
   notifySlack "Scaling down $asgName."
 }
@@ -103,7 +106,7 @@ IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
 
 while true; do
   for autoscaler in "${autoscalingArr[@]}"; do
-    IFS='|' read minRRA maxRRA asgName <<< "$autoscaler"
+    IFS='|' read minRRA maxRRA asgName asgRegion <<< "$autoscaler"
 
     if arePodsPending; then
       echo "Pending pods..."
