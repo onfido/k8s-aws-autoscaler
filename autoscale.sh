@@ -73,10 +73,10 @@ scaleUp() {
 
   if [[ ! $? -eq 0 ]]; then
     notifySlack "Failed to scale up $asgName, hit maximum."
-    return 0
+    return 1
   fi
 
-  notifySlack "Scaling up $asgName."
+  return 0
 }
 
 scaleDown() {
@@ -88,7 +88,7 @@ scaleDown() {
 
   if [[ ! $? -eq 0 ]]; then
     notifySlack "Failed to scale down $asgName, hit minimum."
-    return 0
+    return 1
   fi
 
   kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
@@ -97,40 +97,61 @@ scaleDown() {
 
   aws ec2 terminate-instances --instance-ids $nodeId --region $asgRegion
 
-  notifySlack "Scaling down $asgName."
+  return 0
 }
 
 
 autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
 IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
 
+RRAs=()
+
 while true; do
+
+  index=0
   for autoscaler in "${autoscalingArr[@]}"; do
     IFS='|' read minRRA maxRRA asgName asgRegion <<< "$autoscaler"
 
     if arePodsPending; then
-      echo "Pending pods..."
-      echo "Scaling up $asgName."
+      msg="Pending pods. Scaling up $asgName."
+      echo $msg
       scaleUp
+      if [[ $? -eq 0 ]]; then
+        notifySlack $msg
+      fi
     else
       nodesDesc=$(kubectl describe nodes -l aws.autoscaling.groupName=$asgName)
       currentRRA=$(getNodesRRA)
 
+      # Check that currentRRA has length 1-3 (digits). If it fails, it will return "Runtime error..."
       if [[ ${#currentRRA} -gt 0 && ${#currentRRA} -lt 4 ]]; then
-        echo "$currentRRA% RRA for $asgName."
+        # Only print currentRRA when previous reading doesn't exist or is different
+        if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
+          echo "$currentRRA% RRA for $asgName."
+          RRAs[$index]=$currentRRA
+        fi
 
-        if [[ $currentRRA > $maxRRA ]]; then
-          echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
+        if [[ $currentRRA -gt $maxRRA ]]; then
+          msg="$currentRRA% > $maxRRA%. Scaling up $asgName."
+          echo $msg
           scaleUp
-        elif [[ $currentRRA < $minRRA ]]; then
-          echo "$currentRRA% < $minRRA%. Scaling down $asgName."
+          if [[ $? -eq 0 ]]; then
+            notifySlack $msg
+          fi
+        elif [[ $currentRRA -lt $minRRA ]]; then
+          msg="$currentRRA% < $minRRA%. Scaling down $asgName."
+          echo $msg
           scaleDown
+          if [[ $? -eq 0 ]]; then
+            notifySlack $msg
+          fi
         fi
       else
         notifySlack "Failed to calculate nodes RRA for $asgName."
       fi
     fi
 
+    (( index++ ))
     sleep 3
   done
 
