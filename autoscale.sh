@@ -113,11 +113,10 @@ while true; do
     IFS='|' read minRRA maxRRA asgName asgRegion <<< "$autoscaler"
 
     if arePodsPending; then
-      msg="Pending pods. Scaling up $asgName."
-      echo $msg
+      echo "Pending pods. Scaling up $asgName."
       scaleUp
       if [[ $? -eq 0 ]]; then
-        notifySlack $msg
+        notifySlack "Pending pods. Scaling up $asgName."
       fi
     else
       nodesDesc=$(kubectl describe nodes -l aws.autoscaling.groupName=$asgName)
@@ -132,18 +131,16 @@ while true; do
         fi
 
         if [[ $currentRRA -gt $maxRRA ]]; then
-          msg="$currentRRA% > $maxRRA%. Scaling up $asgName."
-          echo $msg
+          echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
           scaleUp
           if [[ $? -eq 0 ]]; then
-            notifySlack $msg
+            notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName."
           fi
         elif [[ $currentRRA -lt $minRRA ]]; then
-          msg="$currentRRA% < $minRRA%. Scaling down $asgName."
-          echo $msg
+          echo "$currentRRA% < $minRRA%. Scaling down $asgName."
           scaleDown
           if [[ $? -eq 0 ]]; then
-            notifySlack $msg
+            notifySlack "$currentRRA% < $minRRA%. Scaling down $asgName."
           fi
         fi
       else
