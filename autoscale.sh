@@ -4,13 +4,12 @@ minRRA=""
 maxRRA=""
 asgName=""
 asgRegion=""
-nodesDesc=""
 
 arePodsPending() {
   # Gets pending pods older than 2min
   pendingPods=$(kubectl get pods --all-namespaces | \
     grep -E '([a-zA-Z0-9-]+\s+){2}[0-9/]+\s+Pending+(\s+[0-9]+){2}m' | \
-    sed 's/m$//g' | awk '$6 >= 2 {print $1 "|" $2}')
+    sed 's/m$//g' | awk '$6 >= 2 { print $1 "|" $2 }')
 
   checkedSelectors=()
 
@@ -41,8 +40,9 @@ arePodsPending() {
 
 getNodesRRA() {
   # Gets requested CPU and RAM resources on current ASG nodes
-  results=$(echo "$nodesDesc" | grep -A3 "Total limits may be over 100 percent" | \
-    grep -E '^\s+[0-9]+' | awk '{print $2, " ", $6}' | grep -oE '[0-9]{1,3}')
+  results=$(kubectl describe nodes -l aws.autoscaling.groupName=$asgName | \
+    grep -A3 "Total limits may be over 100 percent" | \
+    grep -E '^\s+[0-9]+' | awk '{ print $2, " ", $6 }' | grep -oE '[0-9]{1,3}')
 
   counter=0
   sum=0
@@ -80,8 +80,16 @@ scaleUp() {
 }
 
 scaleDown() {
-  nodeName=$(echo "$nodesDesc" | grep "Name:" | awk '{print $2}' | head -n1)
-  nodeId=$(echo "$nodesDesc" | grep "ExternalID:" | awk '{print $2}' | head -n1)
+  # Get the oldest node in the ASG
+  nodeName=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName \
+    --sort-by='{.metadata.creationTimestamp}' | awk '{ if(NR==2) print $1 }')
+
+  nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
+
+  if [[ $nodeName == "" || $nodeId == "" ]]; then
+    notifySlack "Failed to scale down $asgName, no nodes found."
+    return 1
+  fi
 
   aws autoscaling detach-instances --instance-ids $nodeId --auto-scaling-group-name $asgName \
     --should-decrement-desired-capacity --region $asgRegion
@@ -119,7 +127,6 @@ while true; do
         notifySlack "Pending pods. Scaling up $asgName."
       fi
     else
-      nodesDesc=$(kubectl describe nodes -l aws.autoscaling.groupName=$asgName)
       currentRRA=$(getNodesRRA)
 
       # Check that currentRRA has length 1-3 (digits). If it fails, it will return "Runtime error..."
