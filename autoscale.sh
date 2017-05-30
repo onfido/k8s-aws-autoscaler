@@ -8,8 +8,8 @@ asgRegion=""
 arePodsPending() {
   # Gets pending pods older than 2min
   pendingPods=$(kubectl get pods --all-namespaces | \
-    grep -E '([a-zA-Z0-9-]+\s+){2}[0-9/]+\s+Pending+(\s+[0-9]+){2}m' | \
-    sed 's/m$//g' | awk '$6 >= 2 { print $1 "|" $2 }')
+    grep -E '([a-zA-Z0-9-]+\s+){2}[0-9/]+\s+Pending+(\s+[0-9]+){2}[mh]' | \
+    sed 's/(m|h)$//g' | awk '$6 >= 1 { print $1 "|" $2 }')
 
   checkedSelectors=()
 
@@ -19,7 +19,7 @@ arePodsPending() {
     # Gets pending pod node selector
     nodeSelector=$(kubectl describe pod -n $namespace $podName | \
       sed -n '/Node-Selectors:/{:a;p;n;/^Tolerations:/!ba}' | \
-      sed 's/\t//g;s/Node-Selectors://' | sed -n ':a;N;$!ba;s/\n/,/p')
+      sed 's/\t//g;s/Node-Selectors://' | tr '\n' ',' | sed 's/,$//g')
 
     # Checks if node selector not empty and if it hasn't already been checked against current ASG
     if [[ $nodeSelector != "" && ! "${checkedSelectors[@]}" =~ "${nodeSelector}" ]]; then
