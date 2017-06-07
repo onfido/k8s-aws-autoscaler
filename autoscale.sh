@@ -60,13 +60,22 @@ notifySlack() {
     return 0
   fi
 
-  curl -s -X POST --data-urlencode 'payload={"text": "'"$1"'"}' $SLACK_HOOK > /dev/null
+  curl -s --retry 3 --retry-delay 3 -X POST --data-urlencode 'payload={"text": "'"$1"'"}' $SLACK_HOOK > /dev/null
 }
 
 scaleUp() {
   currentDesired=$(aws autoscaling describe-auto-scaling-groups \
     --auto-scaling-group-name $asgName --region $asgRegion | \
     jq '.AutoScalingGroups[].DesiredCapacity')
+
+  if [[ $currentDesired == "" ]]; then
+    # If awscli request fails, retry after 3 seconds
+    sleep 3
+
+    currentDesired=$(aws autoscaling describe-auto-scaling-groups \
+      --auto-scaling-group-name $asgName --region $asgRegion | \
+      jq '.AutoScalingGroups[].DesiredCapacity')
+  fi
 
   aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
     --desired-capacity $(expr $currentDesired + 1) --region $asgRegion
@@ -87,8 +96,18 @@ scaleDown() {
   nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
 
   if [[ $nodeName == "" || $nodeId == "" ]]; then
-    notifySlack "Failed to scale down $asgName, no nodes found."
-    return 1
+    # If kube api requests fail, retry after 3 seconds
+    sleep 3
+
+    nodeName=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName \
+      --sort-by='{.metadata.creationTimestamp}' | awk '{ if(NR==2) print $1 }')
+
+    nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
+
+    if [[ $nodeName == "" || $nodeId == "" ]]; then
+      notifySlack "Failed to scale down $asgName, no nodes found."
+      return 1
+    fi
   fi
 
   aws autoscaling detach-instances --instance-ids $nodeId --auto-scaling-group-name $asgName \
