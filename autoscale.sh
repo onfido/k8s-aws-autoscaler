@@ -161,8 +161,8 @@ rotateNodes() {
     fi
   fi
 
-  # Add 12h to the nodes rotation check time
-  rotateNodesCheckTime=$(expr $(date +%s) + 43200)
+  # Add 1h to the nodes rotation check time
+  rotateNodesCheckTime=$(expr $(date +%s) + 3600)
 
   return 0
 }
