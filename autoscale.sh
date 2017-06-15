@@ -127,6 +127,46 @@ scaleDown() {
   return 0
 }
 
+rotateNodesCheckTime=$(date +%s)
+
+rotateNodes() {
+  currentTime=$(date +%s)
+  if [[ $currentTime -lt $rotateNodesCheckTime ]]; then
+    return 0
+  fi
+
+  # Get number of nodes older than ROTATE_NODES in the current ASG
+  oldNodes=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName 2> /dev/null | \
+    grep -E '([a-zA-Z0-9,.-]+\s+){2}[0-9]d.*' | sed 's/d//g' | \
+    awk -v days=$ROTATE_NODES '$3 > days { print }' | wc -l)
+
+  if [[ $oldNodes != "" && $oldNodes -gt 0 ]]; then
+    currentAsgNodes=$(aws autoscaling describe-auto-scaling-groups \
+      --auto-scaling-group-name $asgName --region $asgRegion | \
+      jq '.AutoScalingGroups[].DesiredCapacity')
+
+    if [[ $currentAsgNodes != "" ]]; then
+      desiredNodes=$(expr $currentAsgNodes + $oldNodes 2> /dev/null)
+
+      if [[ $desiredNodes != "" && $desiredNodes -gt 0 ]]; then
+        aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
+          --desired-capacity $desiredNodes --region $asgRegion
+
+        if [[ $? -eq 0 ]]; then
+          notifySlack "Found $oldNodes nodes older than $ROTATE_NODES days in $asgName. Scaled up $oldNodes and waiting for scale down..."
+        else
+          notifySlack "Found $oldNodes nodes older than $ROTATE_NODES days in $asgName. Failed to scale up for nodes rotation, hit maximum."
+        fi
+      fi
+    fi
+  fi
+
+  # Add 12h to the nodes rotation check time
+  rotateNodesCheckTime=$(expr $(date +%s) + 43200)
+
+  return 0
+}
+
 
 autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
 IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
@@ -167,6 +207,11 @@ while true; do
           scaleDown
           if [[ $? -eq 0 ]]; then
             notifySlack "$currentRRA% < $minRRA%. Scaling down $asgName."
+          fi
+        else
+          # If no pending pods, no need to scale up or down: Check for old nodes rotation
+          if [ ! -z "$ROTATE_NODES" ]; then
+            rotateNodes
           fi
         fi
       else
