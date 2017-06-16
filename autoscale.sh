@@ -130,7 +130,7 @@ scaleDown() {
 rotateNodes() {
   # Get number of nodes older than ROTATE_NODES in the current ASG
   oldNodes=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName 2> /dev/null | \
-    grep -E '([a-zA-Z0-9,.-]+\s+){2}[0-9]d.*' | sed 's/d//g' | \
+    grep -E '([a-zA-Z0-9,.-]+\s+){2}[0-9]+d.*' | sed 's/d//g' | \
     awk -v days=$ROTATE_NODES '$3 > days { print }' | wc -l)
 
   if [[ $oldNodes != "" && $oldNodes -gt 0 ]]; then
