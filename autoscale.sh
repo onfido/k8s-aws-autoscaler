@@ -127,14 +127,7 @@ scaleDown() {
   return 0
 }
 
-rotateNodesCheckTime=$(date +%s)
-
 rotateNodes() {
-  currentTime=$(date +%s)
-  if [[ $currentTime -lt $rotateNodesCheckTime ]]; then
-    return 0
-  fi
-
   # Get number of nodes older than ROTATE_NODES in the current ASG
   oldNodes=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName 2> /dev/null | \
     grep -E '([a-zA-Z0-9,.-]+\s+){2}[0-9]d.*' | sed 's/d//g' | \
@@ -161,9 +154,6 @@ rotateNodes() {
     fi
   fi
 
-  # Add 1h to the nodes rotation check time
-  rotateNodesCheckTime=$(expr $(date +%s) + 3600)
-
   return 0
 }
 
@@ -172,6 +162,8 @@ autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
 IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
 
 RRAs=()
+checkedASGsForNodesRotation=()
+rotateNodesCheckTime=$(date +%s)
 
 while true; do
 
@@ -211,7 +203,22 @@ while true; do
         else
           # If no pending pods, no need to scale up or down: Check for old nodes rotation
           if [ ! -z "$ROTATE_NODES" ]; then
-            rotateNodes
+            # If current ASG hasn't been checked
+            if [[ ! "${checkedASGsForNodesRotation[@]}" =~ "${asgName}" ]]; then
+              # Check for nodes rotation and append current ASG to list if check interval time is good
+              currentTime=$(date +%s)
+              if [[ $rotateNodesCheckTime -le $currentTime ]]; then
+                rotateNodes
+                checkedASGsForNodesRotation+=($asgName)
+              fi
+            else
+              # If all ASGs have been checked for nodes rotation
+              if [[ ${#checkedASGsForNodesRotation[@]} -ge ${#autoscalingArr[@]} ]]; then
+                # Check again for nodes rotation in 1h
+                rotateNodesCheckTime=$(expr $(date +%s) + 3600)
+                checkedASGsForNodesRotation=()
+              fi
+            fi
           fi
         fi
       else
