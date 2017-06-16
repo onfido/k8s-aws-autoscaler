@@ -39,3 +39,5 @@ spec:
             value: SLACK_HOOK
           - name: ROTATE_NODES
             value: "2"
+          - name: ROTATE_NODES_INTERVAL
+            value: "14400"

@@ -214,8 +214,8 @@ while true; do
             else
               # If all ASGs have been checked for nodes rotation
               if [[ ${#checkedASGsForNodesRotation[@]} -ge ${#autoscalingArr[@]} ]]; then
-                # Check again for nodes rotation in 1h
-                rotateNodesCheckTime=$(expr $(date +%s) + 3600)
+                # Check again for nodes rotation in ROTATE_NODES_INTERVAL seconds
+                rotateNodesCheckTime=$(expr $(date +%s) + $ROTATE_NODES_INTERVAL)
                 checkedASGsForNodesRotation=()
               fi
             fi

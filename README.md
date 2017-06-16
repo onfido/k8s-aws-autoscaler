@@ -34,7 +34,8 @@ ec2:TerminateInstances
   - e.g. `30|70|General-ASG|eu-west-1;40|60|GPU-ASG|eu-west-1`
 - `SLACK_HOOK` (optional): Slack incoming webhook for event notifications
 - `ROTATE_NODES` (optional): Number of days when instances should be (safely) rotated.
-  - e.g. If set to 2, the autoscaling script will check every hour for nodes older than 2 days. If it finds X old nodes, it will scale up by X and then (safely) scale down X times. The scale down events always pick the oldest instances in the ASGs.
+  - e.g. If set to 2, the autoscaling script will check every `ROTATE_NODES_INTERVAL` seconds for nodes older than 2 days. If it finds X old nodes, it will scale up by X and then (safely) scale down X times. The scale down events always pick the oldest instances in the ASGs.
+- `ROTATE_NODES_INTERVAL` (optional, but required if you set `ROTATE_NODES`): Seconds between checks in the old nodes rotation process (3600+ recommended).
 
 ### Deployment
 
