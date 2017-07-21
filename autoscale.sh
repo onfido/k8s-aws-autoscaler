@@ -127,43 +127,10 @@ scaleDown() {
   return 0
 }
 
-rotateNodes() {
-  # Get number of nodes older than ROTATE_NODES in the current ASG
-  oldNodes=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName 2> /dev/null | \
-    grep -E '([a-zA-Z0-9,.-]+\s+){2}[0-9]+d.*' | sed 's/d//g' | \
-    awk -v days=$ROTATE_NODES '$3 > days { print }' | wc -l)
-
-  if [[ $oldNodes != "" && $oldNodes -gt 0 ]]; then
-    currentAsgNodes=$(aws autoscaling describe-auto-scaling-groups \
-      --auto-scaling-group-name $asgName --region $asgRegion | \
-      jq '.AutoScalingGroups[].DesiredCapacity')
-
-    if [[ $currentAsgNodes != "" ]]; then
-      desiredNodes=$(expr $currentAsgNodes + $oldNodes 2> /dev/null)
-
-      if [[ $desiredNodes != "" && $desiredNodes -gt 0 ]]; then
-        aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
-          --desired-capacity $desiredNodes --region $asgRegion
-
-        if [[ $? -eq 0 ]]; then
-          notifySlack "Found $oldNodes nodes older than $ROTATE_NODES days in $asgName. Scaled up $oldNodes and waiting for scale down..."
-        else
-          notifySlack "Found $oldNodes nodes older than $ROTATE_NODES days in $asgName. Failed to scale up for nodes rotation, hit maximum."
-        fi
-      fi
-    fi
-  fi
-
-  return 0
-}
-
-
 autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
 IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
 
 RRAs=()
-checkedASGsForNodesRotation=()
-rotateNodesCheckTime=$(date +%s)
 
 while true; do
 
@@ -199,26 +166,6 @@ while true; do
           scaleDown
           if [[ $? -eq 0 ]]; then
             notifySlack "$currentRRA% < $minRRA%. Scaling down $asgName."
-          fi
-        else
-          # If no pending pods, no need to scale up or down: Check for old nodes rotation
-          if [ ! -z "$ROTATE_NODES" ]; then
-            # If current ASG hasn't been checked
-            if [[ ! "${checkedASGsForNodesRotation[@]}" =~ "${asgName}" ]]; then
-              # Check for nodes rotation and append current ASG to list if check interval time is good
-              currentTime=$(date +%s)
-              if [[ $rotateNodesCheckTime -le $currentTime ]]; then
-                rotateNodes
-                checkedASGsForNodesRotation+=($asgName)
-              fi
-            else
-              # If all ASGs have been checked for nodes rotation
-              if [[ ${#checkedASGsForNodesRotation[@]} -ge ${#autoscalingArr[@]} ]]; then
-                # Check again for nodes rotation in ROTATE_NODES_INTERVAL seconds
-                rotateNodesCheckTime=$(expr $(date +%s) + $ROTATE_NODES_INTERVAL)
-                checkedASGsForNodesRotation=()
-              fi
-            fi
           fi
         fi
       else

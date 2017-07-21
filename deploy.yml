@@ -37,7 +37,3 @@ spec:
             value: "30|70|General-ASG|eu-west-1;40|60|GPU-ASG|eu-west-1"
           - name: SLACK_HOOK
             value: SLACK_HOOK
-          - name: ROTATE_NODES
-            value: "2"
-          - name: ROTATE_NODES_INTERVAL
-            value: "14400"
