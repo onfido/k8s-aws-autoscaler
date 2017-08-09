@@ -29,9 +29,10 @@ ec2:TerminateInstances
 
 - `INTERVAL` (required): Seconds between checks in the autoscaling process described above (120 - 300 recommended)
 - `AUTOSCALING` (required): Contains min/max RRA(s) and ASG(s) in the following pattern:
-  - single ASG: `<minRRA>|<maxRRA>|<ASG name>|<ASG region>`
-  - multiple ASGs: `<minRRA>|<maxRRA>|<ASG1 name>|<ASG1 region>;<minRRA>|<maxRRA>|<ASG2 name>|<ASG2 region>`
-  - e.g. `30|70|General-ASG|eu-west-1;40|60|GPU-ASG|eu-west-1`
+  - single ASG: `<minRRA>|<maxRRA>|<ASG name>|<node labels>|<ASG region>`
+  - multiple ASGs: `<minRRA>|<maxRRA>|<ASG1 name>|<node labels>|<ASG1 region>;<minRRA>|<maxRRA>|<ASG2 name>|<node labels>|<ASG2 region>`
+  - e.g. `30|70|General-ASG|Group=General|eu-west-1;40|60|GPU-ASG|Group=Research,GroupType=GPU|eu-west-1` or check `deploy.yml`
+    - `<node labels>` like `Group=General` are currently used in the calculations of the RRA for node groups and are very useful when we have 2+ ASGs per node group, of which we only want to scale one of them (the other ASGs might be for Spot instances with static number of nodes).
 - `SLACK_HOOK` (optional): Slack incoming webhook for event notifications
 
 ### Deployment

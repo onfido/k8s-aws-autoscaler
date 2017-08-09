@@ -3,6 +3,7 @@
 minRRA=""
 maxRRA=""
 asgName=""
+labels=""
 asgRegion=""
 
 arePodsPending() {
@@ -39,8 +40,8 @@ arePodsPending() {
 }
 
 getNodesRRA() {
-  # Gets requested CPU and RAM resources on current ASG nodes
-  results=$(kubectl describe nodes -l aws.autoscaling.groupName=$asgName | \
+  # Gets requested CPU and RAM resources for nodes with current labels
+  results=$(kubectl describe nodes -l $labels | \
     grep -A3 "Total limits may be over 100 percent" | \
     grep -E '^\s+[0-9]+' | awk '{ print $2, " ", $6 }' | grep -oE '[0-9]{1,3}')
 
@@ -51,7 +52,7 @@ getNodesRRA() {
     sum=$(expr $sum + $i)
   done
 
-  # Returns average of requested CPU/RAM for current ASG nodes
+  # Returns average of requested CPU/RAM for nodes with current labels
   echo "$sum / $counter" | bc
 }
 
@@ -136,7 +137,7 @@ while true; do
 
   index=0
   for autoscaler in "${autoscalingArr[@]}"; do
-    IFS='|' read minRRA maxRRA asgName asgRegion <<< "$autoscaler"
+    IFS='|' read minRRA maxRRA asgName labels asgRegion <<< "$autoscaler"
 
     if arePodsPending; then
       echo "Pending pods. Scaling up $asgName."
