@@ -1,7 +1,7 @@
 ## AWS Kubernetes nodes autoscaler
 
-Autoscaling process (`autoscale.sh`):
-- Loops through AWS ASG defined in `AUTOSCALING` (env var), every `INTERVAL` (env var) seconds.
+#### Autoscaling process (`autoscale.sh`, `deploy-autoscaler.yml`):
+- Loops through AWS ASG defined in `AUTOSCALING` (env var), every `INTERVAL` (env var, default 180) seconds.
 - Will scale up (increase desired nodes on an ASG) if:
   - Pods assigned to that ASG are _Pending_ for more than 2min.
   - Current total RRA is bigger than maximum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
@@ -9,7 +9,8 @@ Autoscaling process (`autoscale.sh`):
   - Current total RRA is smaller than minimum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
 - Every scale up/scale down event or getNodesRRA failed event will notify Slack if the `SLACK_HOOK` env var is set.
 
-This Pod runs in the `kube-system` namespace on k8s master nodes.
+#### Nodes rotation (`rotate-nodes.sh`, `deploy-rotate-cron.yml`):
+Every 6h (cron schedule) it loops through the defined `AUTOSCALING_GROUPS` (env var) and gets the number of nodes older than `MAX_AGE_DAYS` (env var, default 2) days and scales up the ASG by that number. The autoscaler will then scale down the ASG back to the desired capacity starting with the oldest nodes.
 
 ### Requirements
 
@@ -27,7 +28,8 @@ ec2:TerminateInstances
 
 ### Env vars
 
-- `INTERVAL` (required): Seconds between checks in the autoscaling process described above (120 - 300 recommended)
+#### Autoscaler (`deploy-autoscaler.yml`)
+- `INTERVAL` (required, default 180): Seconds between checks in the autoscaling process described above
 - `AUTOSCALING` (required): Contains min/max RRA(s) and ASG(s) in the following pattern:
   - single ASG: `<minRRA>|<maxRRA>|<ASG name>|<node labels>|<ASG region>`
   - multiple ASGs: `<minRRA>|<maxRRA>|<ASG1 name>|<node labels>|<ASG1 region>;<minRRA>|<maxRRA>|<ASG2 name>|<node labels>|<ASG2 region>`
@@ -35,10 +37,20 @@ ec2:TerminateInstances
     - `<node labels>` like `Group=General` are currently used in the calculations of the RRA for node groups and are very useful when we have 2+ ASGs per node group, of which we only want to scale one of them (the other ASGs might be for Spot instances with static number of nodes).
 - `SLACK_HOOK` (optional): Slack incoming webhook for event notifications
 
+#### Nodes rotation (`deploy-rotate-cron.yml`)
+- `MAX_AGE_DAYS` (required, default 2): Max age of nodes in days
+  - e.g. If set to 2, the rotate-nodes script will check for nodes older than 2 days. If it finds X old nodes, it will scale up the ASG by X and then the autoscaler will (safely) scale down X times. The scale down events always pick the oldest instances in the ASG.
+- `AUTOSCALING_GROUPS` (required): Contains ASG(s) and AWS region(s) in the following pattern:
+  - single ASG: `<ASG name>|<ASG region>`
+  - multiple ASGs: `<ASG1 name>|<ASG1 region>;<ASG2 name>|<ASG2 region>`
+  - e.g. `General-ASG|eu-west-1;GPU-ASG|eu-west-1`
+- `SLACK_HOOK` (optional): Slack incoming webhook for event notifications
+
 ### Deployment
 
 ```
-kubectl --context CONTEXT -n kube-system apply -f deploy.yml
+kubectl --context CONTEXT -n kube-system apply -f deploy-autoscaler.yml
+kubectl --context CONTEXT -n kube-system apply -f deploy-rotate-cron.yml
 ```
 
 ### Notes

@@ -1,0 +1,42 @@
+apiVersion: batch/v2alpha1
+kind: CronJob
+metadata:
+  name: k8s-rotate-nodes
+  namespace: kube-system
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: k8s-rotate-nodes
+          annotations:
+            scheduler.alpha.kubernetes.io/tolerations: |
+              [
+                {
+                  "key": "dedicated",
+                  "operator": "Equal",
+                  "value": "master",
+                  "effect": "NoSchedule"
+                }
+              ]
+        spec:
+          nodeSelector:
+            kubernetes.io/role: master
+          restartPolicy: OnFailure
+          containers:
+            - name: k8s-rotate-nodes
+              image: onfido/k8s-aws-autoscaler
+              command: ["/bin/bash", "/bin/rotate-nodes.sh"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 50Mi
+              env:
+                - name: MAX_AGE_DAYS
+                  value: "2"
+                - name: AUTOSCALING_GROUPS
+                  value: "General-ASG|eu-west-1;GPU-ASG|eu-west-1"
+                - name: SLACK_HOOK
+                  value: SLACK_HOOK

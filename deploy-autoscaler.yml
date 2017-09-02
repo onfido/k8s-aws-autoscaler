@@ -32,7 +32,7 @@ spec:
             memory: 50Mi
         env:
           - name: INTERVAL
-            value: "120"
+            value: "180"
           - name: AUTOSCALING
             value: >
               30|70|General-ASG|Group=General|eu-west-1;
