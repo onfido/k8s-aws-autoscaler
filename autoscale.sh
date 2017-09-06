@@ -115,8 +115,7 @@ scaleDown() {
     --should-decrement-desired-capacity --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
-    notifySlack "Failed to scale down $asgName, hit minimum."
-    return 1
+    notifySlack "Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
   fi
 
   kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
