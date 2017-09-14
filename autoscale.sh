@@ -16,8 +16,7 @@ function asgMultiAzCheck() {
     return 1
   fi
 
-  local multiAzNoWS=$(echo "$MULTI_AZ" | tr -d "[:space:]")
-  IFS=',' read -ra multiAZ <<< $multiAzNoWS
+  local multiAZ=$(echo "$MULTI_AZ" | tr -d "[:space:]" | tr "," " ")
 
   local currentAZs=$(kubectl describe nodes -l $selector | \
     grep zone | awk -F "=" '{print $2}')
@@ -223,8 +222,7 @@ function main() {
 }
 
 
-autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
-IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
+autoscalingArr=$(echo "$AUTOSCALING" | tr -d "[:space:]" | tr ";" " ")
 
 while true; do
   main $autoscalingArr
