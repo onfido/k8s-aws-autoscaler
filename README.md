@@ -8,6 +8,7 @@
 - Will scale down (detach + drain + terminate oldest node in ASG) if:
   - Current total RRA is smaller than minimum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
 - Every scale up/scale down event or getNodesRRA failed event will notify Slack if the `SLACK_HOOK` env var is set.
+Slack will also be notified if the current ASG nodes do not cover all AZs defined in `MULTI_AZ` env var.
 
 #### Nodes rotation (`rotate-nodes.sh`, `deploy-rotate-cron.yml`):
 Every 6h (cron schedule) it loops through the defined `AUTOSCALING_GROUPS` (env var) and gets the number of nodes older than `MAX_AGE_DAYS` (env var, default 2) days and scales up the ASG by that number. The autoscaler will then scale down the ASG back to the desired capacity starting with the oldest nodes.
@@ -35,6 +36,8 @@ ec2:TerminateInstances
   - multiple ASGs: `<minRRA>|<maxRRA>|<ASG1 name>|<node labels>|<ASG1 region>;<minRRA>|<maxRRA>|<ASG2 name>|<node labels>|<ASG2 region>`
   - e.g. `30|70|General-ASG|Group=General|eu-west-1;40|60|GPU-ASG|Group=Research,GroupType=GPU|eu-west-1` or check `deploy.yml`
     - `<node labels>` like `Group=General` are currently used in the calculations of the RRA for node groups and are very useful when we have 2+ ASGs per node group, of which we only want to scale one of them (the other ASGs might be for Spot instances with static number of nodes).
+- `MULTI_AZ` (optional): The AZs covered by the ASGs described in `AUTOSCALING`. If ASG nodes do not cover all AZs defined, it will notify Slack used the webhook below.
+  - e.g. `eu-west-1a,eu-west-1b,eu-west-1c`
 - `SLACK_HOOK` (optional): Slack incoming webhook for event notifications
 
 #### Nodes rotation (`deploy-rotate-cron.yml`)
