@@ -8,6 +8,8 @@ function notifySlack() {
   curl -s --retry 3 --retry-delay 3 -X POST --data-urlencode 'payload={"text": "'"$1"'"}' $SLACK_HOOK > /dev/null
 }
 
+multiAZ=$(echo "$MULTI_AZ" | tr -d "[:space:]" | tr "," " ")
+
 function asgMultiAzCheck() {
   local selector=$1
   local asgName=$2
@@ -15,8 +17,6 @@ function asgMultiAzCheck() {
   if [ -z "$MULTI_AZ" ]; then
     return 1
   fi
-
-  local multiAZ=$(echo "$MULTI_AZ" | tr -d "[:space:]" | tr "," " ")
 
   local currentAZs=$(kubectl describe nodes -l $selector | \
     grep zone | awk -F "=" '{print $2}')
@@ -163,10 +163,10 @@ function scaleDown() {
   return 0
 }
 
+autoscalingArr=$(echo "$AUTOSCALING" | tr -d "[:space:]" | tr ";" " ")
 RRAs=()
 
 function main() {
-  local autoscalingArr=$1
   local index=0
 
   for autoscaler in "${autoscalingArr[@]}"; do
@@ -222,9 +222,7 @@ function main() {
 }
 
 
-autoscalingArr=$(echo "$AUTOSCALING" | tr -d "[:space:]" | tr ";" " ")
-
 while true; do
-  main $autoscalingArr
+  main
   sleep $INTERVAL
 done
