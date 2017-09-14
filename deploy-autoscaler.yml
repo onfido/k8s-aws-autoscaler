@@ -37,5 +37,7 @@ spec:
             value: >
               30|70|General-ASG|Group=General|eu-west-1;
               40|60|GPU-ASG|Group=Research,GroupType=GPU|eu-west-1
+          - name: MULTI_AZ
+            value: eu-west-1a,eu-west-1b,eu-west-1c
           - name: SLACK_HOOK
             value: SLACK_HOOK
