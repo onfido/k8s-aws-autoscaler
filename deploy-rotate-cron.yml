@@ -29,6 +29,7 @@ spec:
             - name: k8s-rotate-nodes
               image: onfido/k8s-aws-autoscaler
               command: ["/bin/bash", "/bin/rotate-nodes.sh"]
+              imagePullPolicy: Always
               resources:
                 requests:
                   cpu: 100m
