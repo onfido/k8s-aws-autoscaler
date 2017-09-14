@@ -173,9 +173,9 @@ function main() {
   for autoscaler in "${autoscalingArr[@]}"; do
     IFS='|' read minRRA maxRRA asgName labels asgRegion <<< "$autoscaler"
 
-    local podsPending=$(arePodsPending $asgName)
+    arePodsPending $asgName
 
-    if $podsPending; then
+    if [[ $? -eq 0 ]]; then
       echo "Pending pods. Scaling up $asgName."
       scaleUp $asgName $asgRegion
 
