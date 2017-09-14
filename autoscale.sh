@@ -8,7 +8,8 @@ function notifySlack() {
   curl -s --retry 3 --retry-delay 3 -X POST --data-urlencode 'payload={"text": "'"$1"'"}' $SLACK_HOOK > /dev/null
 }
 
-multiAZ=$(echo "$MULTI_AZ" | tr -d "[:space:]" | tr "," " ")
+multiAzNoWS=$(echo "$MULTI_AZ" | tr -d "[:space:]")
+IFS=',' read -ra multiAZ <<< $multiAzNoWS
 
 function asgMultiAzCheck() {
   local selector=$1
@@ -163,7 +164,9 @@ function scaleDown() {
   return 0
 }
 
-autoscalingArr=$(echo "$AUTOSCALING" | tr -d "[:space:]" | tr ";" " ")
+autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
+IFS=';' read -ra autoscalingArr <<< "$autoscalingNoWS"
+
 RRAs=()
 
 function main() {
