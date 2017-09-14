@@ -12,6 +12,10 @@ function asgMultiAzCheck() {
   local selector=$1
   local asgName=$2
 
+  if [ -z "$MULTI_AZ" ]; then
+    return 1
+  fi
+
   local multiAzNoWS=$(echo "$MULTI_AZ" | tr -d "[:space:]")
   IFS=',' read -ra multiAZ <<< $multiAzNoWS
 
