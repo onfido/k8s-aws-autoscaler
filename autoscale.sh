@@ -34,7 +34,7 @@ function asgMultiAzCheck() {
     missingAZs+="$zone "
   done
 
-  notifySlack "ASG $asgName has no nodes in: $missingAZs."
+  notifySlack "<!channel> ASG $asgName has no nodes in: $missingAZs."
   return 0
 }
 
@@ -79,9 +79,24 @@ function arePodsPending() {
 function getNodesRRA() {
   local labels=$1
 
+  local nodesDescription=$(kubectl describe nodes -l $labels)
+  local descriptionStatus=$?
+
+  # If nodes description failed, k8s API might have been unresponsive, retry in 3 seconds
+  if [[ ! $descriptionStatus -eq 0 ]]; then
+    sleep 3
+    nodesDescription=$(kubectl describe nodes -l $labels)
+    descriptionStatus=$?
+  fi
+
+  # If nodes description was successful but no nodes were found, return -1
+  if [[ $descriptionStatus -eq 0 && $nodesDescription == "" ]]; then
+    echo -1
+    return 0
+  fi
+
   # Gets requested CPU and RAM resources for nodes with current labels
-  local results=$(kubectl describe nodes -l $labels | \
-    grep -A3 "Total limits may be over 100 percent" | \
+  local results=$(echo "$nodesDescription" | grep -A3 "Total limits may be over 100 percent" | \
     grep -E '^\s+[0-9]+' | awk '{ print $2, " ", $6 }' | grep -oE '[0-9]{1,3}')
 
   local counter=0
@@ -116,7 +131,7 @@ function scaleUp() {
     --desired-capacity $(expr $currentDesired + 1) --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
-    notifySlack "Failed to scale up $asgName, hit maximum."
+    notifySlack "<!channel> Failed to scale up $asgName, hit maximum."
     return 1
   fi
 
@@ -143,7 +158,7 @@ function scaleDown() {
     nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
 
     if [[ $nodeName == "" || $nodeId == "" ]]; then
-      notifySlack "Failed to scale down $asgName, no nodes found."
+      notifySlack "<!channel> Failed to scale down $asgName, no nodes found."
       return 1
     fi
   fi
@@ -152,7 +167,7 @@ function scaleDown() {
     --should-decrement-desired-capacity --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
-    notifySlack "Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
+    notifySlack "<!channel> Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
   fi
 
   kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
@@ -188,32 +203,43 @@ function main() {
     else
       local currentRRA=$(getNodesRRA $labels)
 
-      # Check that currentRRA has length 1-3 (digits). If it fails, it will return "Runtime error..."
+      # Check that getNodesRRA returned a 1-3 digit number
       if [[ ${#currentRRA} -gt 0 && ${#currentRRA} -lt 4 ]]; then
+        # Check that getNodesRRA didn't return -1 (no nodes found)
+        if [[ ! $currentRRA -eq -1 ]]; then
 
-        # Only print currentRRA when previous reading doesn't exist or is different
-        if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
-          echo "$currentRRA% RRA for $asgName."
-          RRAs[$index]=$currentRRA
-        fi
+          # Only print currentRRA when previous reading doesn't exist or is different
+          if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
+            echo "$currentRRA% RRA for $asgName."
+            RRAs[$index]=$currentRRA
+          fi
 
-        if [[ $currentRRA -gt $maxRRA ]]; then
-          echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
+          if [[ $currentRRA -gt $maxRRA ]]; then
+            echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
+            scaleUp $asgName $asgRegion
+
+            if [[ $? -eq 0 ]]; then
+              notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName."
+            fi
+
+          elif [[ $currentRRA -lt $minRRA ]]; then
+            echo "$currentRRA% < $minRRA%. Scaling down $asgName."
+            scaleDown $asgName $asgRegion
+
+            if [[ $? -eq 0 ]]; then
+              notifySlack "$currentRRA% < $minRRA%. Scaling down $asgName."
+            fi
+          fi
+
+        else
+          notifySlack "<!channel> ASG $asgName has no nodes."
           scaleUp $asgName $asgRegion
 
           if [[ $? -eq 0 ]]; then
-            notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName."
+            notifySlack "Pending pods. Scaling up $asgName."
           fi
-
-        elif [[ $currentRRA -lt $minRRA ]]; then
-          echo "$currentRRA% < $minRRA%. Scaling down $asgName."
-          scaleDown $asgName $asgRegion
-
-          if [[ $? -eq 0 ]]; then
-            notifySlack "$currentRRA% < $minRRA%. Scaling down $asgName."
-          fi
-
         fi
+
       else
         notifySlack "Failed to calculate nodes RRA for $asgName."
       fi
