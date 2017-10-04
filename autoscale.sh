@@ -34,7 +34,7 @@ function asgMultiAzCheck() {
     missingAZs+="$zone "
   done
 
-  notifySlack "!channel ASG $asgName has no nodes in: $missingAZs."
+  notifySlack "<!channel> ASG $asgName has no nodes in: $missingAZs."
   return 0
 }
 
@@ -131,7 +131,7 @@ function scaleUp() {
     --desired-capacity $(expr $currentDesired + 1) --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
-    notifySlack "!channel Failed to scale up $asgName, hit maximum."
+    notifySlack "<!channel> Failed to scale up $asgName, hit maximum."
     return 1
   fi
 
@@ -158,7 +158,7 @@ function scaleDown() {
     nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
 
     if [[ $nodeName == "" || $nodeId == "" ]]; then
-      notifySlack "!channel Failed to scale down $asgName, no nodes found."
+      notifySlack "<!channel> Failed to scale down $asgName, no nodes found."
       return 1
     fi
   fi
@@ -167,7 +167,7 @@ function scaleDown() {
     --should-decrement-desired-capacity --region $asgRegion
 
   if [[ ! $? -eq 0 ]]; then
-    notifySlack "!channel Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
+    notifySlack "<!channel> Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
   fi
 
   kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
@@ -232,7 +232,7 @@ function main() {
           fi
 
         else
-          notifySlack "!channel ASG $asgName has no nodes."
+          notifySlack "<!channel> ASG $asgName has no nodes."
           scaleUp $asgName $asgRegion
 
           if [[ $? -eq 0 ]]; then
