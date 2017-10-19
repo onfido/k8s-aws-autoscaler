@@ -239,7 +239,8 @@ function main() {
 
           if [[ $currentRRA -gt $maxRRA ]]; then
             echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
-            scaleUp $asgName $asgRegion 1
+            scaleUp $asgName $asgRegion \
+                    $(expr $(expr $(expr $currentRRA - $maxRRA) * $(getCurrentNodeCount)) / $maxRRA)
 
             if [[ $? -eq 0 ]]; then
               notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName."
