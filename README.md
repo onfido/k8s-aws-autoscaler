@@ -3,7 +3,7 @@
 #### Autoscaling process (`autoscale.sh`, `deploy-autoscaler.yml`):
 - Loops through AWS ASG defined in `AUTOSCALING` (env var), every `INTERVAL` (env var, default 180) seconds.
 - Will scale up (increase desired nodes on an ASG) if:
-  - Pods assigned to that ASG are _Pending_ for more than 2min.
+  - Pods assigned to that ASG are _Pending_ for more than 1min.
   - Current total RRA is bigger than maximum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
 - Will scale down (detach + drain + terminate oldest node in ASG) if:
   - Current total RRA is smaller than minimum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
