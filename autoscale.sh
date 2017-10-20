@@ -198,10 +198,10 @@ function main() {
     # +1 as it's an integer division and we want ceil of it.
     
     if [[ $pendingPods -gt 0 ]]; then
-      echo "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
-
       local runningPods=$(countRunningPods $labels)
       local newNodesRequiredCount=$(expr $pendingPods \* $(getASGDesiredCapacity $asgName $asgRegion) / $runningPods + 1)
+
+      echo "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
       scaleUp $asgName $asgRegion $newNodesRequiredCount
 
       if [[ $? -eq 0 ]]; then

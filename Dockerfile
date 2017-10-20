@@ -12,7 +12,7 @@ RUN cd /usr/local/bin \
 COPY autoscale.sh rotate-nodes.sh /bin/
 RUN chmod +x /bin/autoscale.sh && chmod +x /bin/rotate-nodes.sh
 
-ENV INTERVAL 180
+ENV INTERVAL 300
 ENV MAX_AGE_DAYS 2
 
 CMD ["bash", "/bin/autoscale.sh"]

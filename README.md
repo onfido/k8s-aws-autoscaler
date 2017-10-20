@@ -1,9 +1,8 @@
 ## AWS Kubernetes nodes autoscaler
 
 #### Autoscaling process (`autoscale.sh`, `deploy-autoscaler.yml`):
-- Loops through AWS ASG defined in `AUTOSCALING` (env var), every `INTERVAL` (env var, default 180) seconds.
+- Loops through AWS ASG defined in `AUTOSCALING` (env var), every `INTERVAL` (env var, default 300) seconds.
 - Will scale up (increase desired nodes on an ASG) if:
-  - Pods assigned to that ASG are _Pending_ for more than 2min.
   - Current total RRA is bigger than maximum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
 - Will scale down (detach + drain + terminate oldest node in ASG) if:
   - Current total RRA is smaller than minimum allowed RRA (from `AUTOSCALING` env var) on the ASG nodes.
@@ -30,7 +29,7 @@ ec2:TerminateInstances
 ### Env vars
 
 #### Autoscaler (`deploy-autoscaler.yml`)
-- `INTERVAL` (required, default 180): Seconds between checks in the autoscaling process described above
+- `INTERVAL` (required, default 300): Seconds between checks in the autoscaling process described above
 - `AUTOSCALING` (required): Contains min/max RRA(s) and ASG(s) in the following pattern:
   - single ASG: `<minRRA>|<maxRRA>|<ASG name>|<node labels>|<ASG region>`
   - multiple ASGs: `<minRRA>|<maxRRA>|<ASG1 name>|<node labels>|<ASG1 region>;<minRRA>|<maxRRA>|<ASG2 name>|<node labels>|<ASG2 region>`
