@@ -12,8 +12,10 @@ multiAzNoWS=$(echo "$MULTI_AZ" | tr -d "[:space:]")
 IFS=',' read -ra multiAZ <<< $multiAzNoWS
 
 function asgMultiAzCheck() {
-  local selector=$1
+  local labels=$1
   local asgName=$2
+
+  local selector="aws.autoscaling.groupName=$asgName,$labels"
 
   if [ -z "$MULTI_AZ" ]; then
     return 1
@@ -38,59 +40,44 @@ function asgMultiAzCheck() {
   return 0
 }
 
-function arePodsPending() {
-  local asgName=$1
+function getPods() {
+  local labels=$1
+  local jqSelectors=""
 
-  # Gets pending pods older than 2min
-  local pendingPods=$(kubectl get pods --all-namespaces | \
-    grep -E '([a-zA-Z0-9-]+\s+){2}[0-9/]+\s+Pending+(\s+[0-9]+){2}[mh]' | \
-    sed 's/(m|h)$//g' | awk '$6 >= 1 { print $1 "|" $2 }')
-
-  local checkedSelectors=()
-
-  for pod in $pendingPods; do
-    IFS='|' read namespace podName <<< "$pod"
-
-    # Gets pending pod node selector
-    local nodeSelector=$(kubectl describe pod -n $namespace $podName | \
-      sed -n '/Node-Selectors:/{:a;p;n;/^Tolerations:/!ba}' | \
-      sed 's/\t//g;s/Node-Selectors://' | tr '\n' ',' | sed 's/,$//g')
-
-    # Checks if node selector not empty and if it hasn't already been checked against current ASG
-    if [[ $nodeSelector != "" && ! "${checkedSelectors[@]}" =~ "${nodeSelector}" ]]; then
-      checkedSelectors+=($nodeSelector)
-
-      local selectorMatchesASG=""
-      selectorMatchesASG=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName,$nodeSelector 2> /dev/null)
-
-      # If node selector exists as label on the same nodes as ASG, pod is pending on that ASG
-      if [[ $selectorMatchesASG != "" ]]; then
-        local selector="aws.autoscaling.groupName=$asgName,$nodeSelector"
-        asgMultiAzCheck $selector $asgName
-
-        return 0
-      fi
-    fi
+  IFS=',' read -ra labelsArr <<< "$labels"
+  for label in"${labelsArr[@]}"; do
+    IFS='=' read key value <<< "$label"
+    jqSelectors+=" | select(.spec.nodeSelector.$key == \"$value\")"
   done
 
-  return 1
+  kubectl get pods --all-namespaces -o json | jq '.items[]'$jqSelectors
+}
+
+function countPendingPods() {
+  getPods $1 | jq '.items[] | select(.status.phase == "Pending") | .metadata.name' | wc -l
+}
+
+function countRunningPods() {
+  getPods $1 | jq '.items[] | select(.status.phase == "Running") | .metadata.name' | wc -l
 }
 
 function getNodesRRA() {
   local labels=$1
 
-  local nodesDescription=$(kubectl describe nodes -l $labels)
-  local descriptionStatus=$?
-
-  # If nodes description failed, k8s API might have been unresponsive, retry in 3 seconds
-  if [[ ! $descriptionStatus -eq 0 ]]; then
-    sleep 3
+  for i in $(seq 10); do
     nodesDescription=$(kubectl describe nodes -l $labels)
     descriptionStatus=$?
-  fi
 
-  # If nodes description was successful but no nodes were found, return -1
-  if [[ $descriptionStatus -eq 0 && $nodesDescription == "" ]]; then
+    [ $descriptionStatus -eq 0 ] && break
+    sleep 3
+  done
+
+  # If nodes description fail
+  if [[ $descriptionStatus -ne 0 ]]; then
+    echo "Master unreachable"
+    return 0
+  elif [[ $nodesDescription == "" ]]; then
+    # If nodes description was successful but no nodes were found, echo -1
     echo -1
     return 0
   fi
@@ -110,32 +97,49 @@ function getNodesRRA() {
   echo "$sum / $counter" | bc
 }
 
+function describeAutoscaling() {
+  local $asgName=$1
+  local $asgRegion=$2
+
+  for i in $(seq 10); do
+    local description=$(aws autoscaling describe-auto-scaling-groups \
+          --auto-scaling-group-name $asgName --region $asgRegion)
+
+    [ $? -eq 0 ] && echo "$description" && return 0
+    sleep 3
+  done
+
+  return 1
+}
+
+function getASGDesiredCapacity() {
+  describeAutoscaling $1 $2 | jq '.AutoScalingGroups[].DesiredCapacity'
+}
+
+function getASGMaxSize() {
+  describeAutoscaling $1 $2 | jq '.AutoScalingGroups[].MaxSize'
+}
+
 function scaleUp() {
   local asgName=$1
   local asgRegion=$2
+  local nodeToAddCount=$3
 
-  local currentDesired=$(aws autoscaling describe-auto-scaling-groups \
-    --auto-scaling-group-name $asgName --region $asgRegion | \
-    jq '.AutoScalingGroups[].DesiredCapacity')
+  local $currentNodeCount=$(getASGDesiredCapacity $asgName $asgRegion)
+  local $maxNodeCount=$(getASGMaxSize $asgName $asgRegion)
+  if [ $(expr $currentNodeCount + $nodeToAddCount) -gt $maxNodeCount ]; then
+    nodeToAddCount=$(expr $maxNodeCount - $currentNodeCount)
+  fi
 
-  if [[ $currentDesired == "" ]]; then
-    # If awscli request fails, retry after 3 seconds
+  for i in $(seq 10); do
+    aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
+          --desired-capacity $(expr $currentNodeCount + $nodeToAddCount) --region $asgRegion
+
+    [ $? -eq 0 ] && return 0
     sleep 3
+  done
 
-    currentDesired=$(aws autoscaling describe-auto-scaling-groups \
-      --auto-scaling-group-name $asgName --region $asgRegion | \
-      jq '.AutoScalingGroups[].DesiredCapacity')
-  fi
-
-  aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
-    --desired-capacity $(expr $currentDesired + 1) --region $asgRegion
-
-  if [[ ! $? -eq 0 ]]; then
-    notifySlack "<!channel> Failed to scale up $asgName, hit maximum."
-    return 1
-  fi
-
-  return 0
+  return 1
 }
 
 function scaleDown() {
@@ -190,23 +194,28 @@ function main() {
   for autoscaler in "${autoscalingArr[@]}"; do
     IFS='|' read minRRA maxRRA asgName labels asgRegion <<< "$autoscaler"
 
-    arePodsPending $asgName
+    pendingPods=$(countPendingPods $labels)
+    # +1 as it's an integer division and we want ceil of it.
+    
+    if [[ $(pendingPods) -gt 0 ]]; then
+      echo "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
 
-    if [[ $? -eq 0 ]]; then
-      echo "Pending pods. Scaling up $asgName."
-      scaleUp $asgName $asgRegion
+      local runningPods=$(countRunningPods $labels)
+      local newNodesRequiredCount=$(expr $pendingPods \* $(getASGDesiredCapacity $asgName $asgRegion) / $runningPods + 1)
+      scaleUp $asgName $asgRegion $newNodesRequiredCount
 
       if [[ $? -eq 0 ]]; then
-        notifySlack "Pending pods. Scaling up $asgName."
+        notifySlack "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
       fi
 
+      asgMultiAzCheck $labels $asgName
     else
       local currentRRA=$(getNodesRRA $labels)
 
       # Check that getNodesRRA returned a 1-3 digit number
       if [[ ${#currentRRA} -gt 0 && ${#currentRRA} -lt 4 ]]; then
         # Check that getNodesRRA didn't return -1 (no nodes found)
-        if [[ ! $currentRRA -eq -1 ]]; then
+        if [[ $currentRRA -ne -1 ]]; then
 
           # Only print currentRRA when previous reading doesn't exist or is different
           if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
@@ -215,11 +224,12 @@ function main() {
           fi
 
           if [[ $currentRRA -gt $maxRRA ]]; then
-            echo "$currentRRA% > $maxRRA%. Scaling up $asgName."
-            scaleUp $asgName $asgRegion
+            local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA)
+            echo "$currentRRA% > $maxRRA%. Scaling up $asgName by $newNodesRequiredCount nodes."
+            scaleUp $asgName $asgRegion $newNodesRequiredCount
 
             if [[ $? -eq 0 ]]; then
-              notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName."
+              notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName by $newNodesRequiredCount nodes."
             fi
 
           elif [[ $currentRRA -lt $minRRA ]]; then
@@ -233,10 +243,10 @@ function main() {
 
         else
           notifySlack "<!channel> ASG $asgName has no nodes."
-          scaleUp $asgName $asgRegion
+          scaleUp $asgName $asgRegion 1
 
           if [[ $? -eq 0 ]]; then
-            notifySlack "Pending pods. Scaling up $asgName."
+            notifySlack "Pending pods. Scaling up $asgName by 1 node."
           fi
         fi
 
