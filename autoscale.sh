@@ -98,8 +98,8 @@ function getNodesRRA() {
 }
 
 function describeAutoscaling() {
-  local $asgName=$1
-  local $asgRegion=$2
+  local asgName=$1
+  local asgRegion=$2
 
   for i in $(seq 10); do
     local description=$(aws autoscaling describe-auto-scaling-groups \
@@ -125,8 +125,8 @@ function scaleUp() {
   local asgRegion=$2
   local nodeToAddCount=$3
 
-  local $currentNodeCount=$(getASGDesiredCapacity $asgName $asgRegion)
-  local $maxNodeCount=$(getASGMaxSize $asgName $asgRegion)
+  local currentNodeCount=$(getASGDesiredCapacity $asgName $asgRegion)
+  local maxNodeCount=$(getASGMaxSize $asgName $asgRegion)
   if [ $(expr $currentNodeCount + $nodeToAddCount) -gt $maxNodeCount ]; then
     nodeToAddCount=$(expr $maxNodeCount - $currentNodeCount)
   fi
