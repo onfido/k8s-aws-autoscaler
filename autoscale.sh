@@ -47,10 +47,10 @@ function getPods() {
   IFS=',' read -ra labelsArr <<< "$labels"
   for label in "${labelsArr[@]}"; do
     IFS='=' read key value <<< "$label"
-    jqSelectors+=" | select(.spec.nodeSelector.$key == \"$value\")"
+    jqSelectors+="| select(.spec.nodeSelector.$key == \"$value\")"
   done
 
-  kubectl get pods --all-namespaces -o json | jq '.items[]'$jqSelectors
+  kubectl get pods --all-namespaces -o json | jq ".items[] $jqSelectors" 
 }
 
 function countPendingPods() {
