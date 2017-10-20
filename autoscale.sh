@@ -54,7 +54,8 @@ function getPods() {
 }
 
 function countPendingPods() {
-  getPods $1 | jq 'select(.status.phase == "Pending") | .metadata.name' | wc -l
+  # If hostIP == null then pod is Pending and not scheduled to a node.
+  getPods $1 | jq 'select(.status.hostIP == null) | .metadata.name' | wc -l
 }
 
 function countRunningPods() {
