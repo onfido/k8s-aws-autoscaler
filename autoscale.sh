@@ -50,7 +50,7 @@ function getPods() {
     jqSelectors+="| select(.spec.nodeSelector.$key == \"$value\")"
   done
 
-  kubectl get pods --all-namespaces -o json | jq ".items[] $jqSelectors" 
+  kubectl get pods --all-namespaces -o json | jq ".items[] $jqSelectors"
 }
 
 function countPendingPods() {
@@ -197,16 +197,16 @@ function main() {
 
     pendingPods=$(countPendingPods $labels)
     # +1 as it's an integer division and we want ceil of it.
-    
+
     if [[ $pendingPods -gt 0 ]]; then
       local runningPods=$(countRunningPods $labels)
       local newNodesRequiredCount=$(expr $pendingPods \* $(getASGDesiredCapacity $asgName $asgRegion) / $runningPods + 1)
 
-      echo "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
+      echo "Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
       scaleUp $asgName $asgRegion $newNodesRequiredCount
 
       if [[ $? -eq 0 ]]; then
-        notifySlack "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
+        notifySlack "Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
       fi
 
       asgMultiAzCheck $labels $asgName
@@ -226,11 +226,11 @@ function main() {
 
           if [[ $currentRRA -gt $maxRRA ]]; then
             local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA)
-            echo "$currentRRA% > $maxRRA%. Scaling up $asgName by $newNodesRequiredCount nodes."
+            echo "$currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
             scaleUp $asgName $asgRegion $newNodesRequiredCount
 
             if [[ $? -eq 0 ]]; then
-              notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName by $newNodesRequiredCount nodes."
+              notifySlack "$currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
             fi
 
           elif [[ $currentRRA -lt $minRRA ]]; then
@@ -247,7 +247,7 @@ function main() {
           scaleUp $asgName $asgRegion 1
 
           if [[ $? -eq 0 ]]; then
-            notifySlack "Pending pods. Scaling up $asgName by 1 node."
+            notifySlack "Pending pods. Scaling up $asgName ASG by 1."
           fi
         fi
 
