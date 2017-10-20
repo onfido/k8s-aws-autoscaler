@@ -45,7 +45,7 @@ function getPods() {
   local jqSelectors=""
 
   IFS=',' read -ra labelsArr <<< "$labels"
-  for label in"${labelsArr[@]}"; do
+  for label in "${labelsArr[@]}"; do
     IFS='=' read key value <<< "$label"
     jqSelectors+=" | select(.spec.nodeSelector.$key == \"$value\")"
   done
