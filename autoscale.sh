@@ -54,11 +54,11 @@ function getPods() {
 }
 
 function countPendingPods() {
-  getPods $1 | jq '.items[] | select(.status.phase == "Pending") | .metadata.name' | wc -l
+  getPods $1 | jq 'select(.status.phase == "Pending") | .metadata.name' | wc -l
 }
 
 function countRunningPods() {
-  getPods $1 | jq '.items[] | select(.status.phase == "Running") | .metadata.name' | wc -l
+  getPods $1 | jq 'select(.status.phase == "Running") | .metadata.name' | wc -l
 }
 
 function getNodesRRA() {
@@ -197,7 +197,7 @@ function main() {
     pendingPods=$(countPendingPods $labels)
     # +1 as it's an integer division and we want ceil of it.
     
-    if [[ $(pendingPods) -gt 0 ]]; then
+    if [[ $pendingPods -gt 0 ]]; then
       echo "Pending pods ($pendingPods). Scaling up $asgName by $newNodesRequiredCount nodes."
 
       local runningPods=$(countRunningPods $labels)
