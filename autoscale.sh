@@ -202,7 +202,7 @@ function main() {
       local runningPods=$(countRunningPods $labels)
       local newNodesRequiredCount=$(expr $pendingPods \* $(getASGDesiredCapacity $asgName $asgRegion) / $runningPods + 1)
 
-      echo "Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
+      echo "$(date) -- Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
       scaleUp $asgName $asgRegion $newNodesRequiredCount
 
       if [[ $? -eq 0 ]]; then
@@ -220,13 +220,13 @@ function main() {
 
           # Only print currentRRA when previous reading doesn't exist or is different
           if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
-            echo "$currentRRA% RRA for $asgName."
+            echo "$(date) -- $currentRRA% RRA for $asgName."
             RRAs[$index]=$currentRRA
           fi
 
           if [[ $currentRRA -gt $maxRRA ]]; then
             local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA)
-            echo "$currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
+            echo "$(date) -- $currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
             scaleUp $asgName $asgRegion $newNodesRequiredCount
 
             if [[ $? -eq 0 ]]; then
@@ -234,7 +234,7 @@ function main() {
             fi
 
           elif [[ $currentRRA -lt $minRRA ]]; then
-            echo "$currentRRA% < $minRRA%. Scaling down $asgName."
+            echo "$(date) -- $currentRRA% < $minRRA%. Scaling down $asgName."
             scaleDown $asgName $asgRegion
 
             if [[ $? -eq 0 ]]; then
