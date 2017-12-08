@@ -65,7 +65,7 @@ function countRunningPods() {
 function getNodesRRA() {
   local labels=$1
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     nodesDescription=$(kubectl describe nodes -l $labels)
     descriptionStatus=$?
 
@@ -102,7 +102,7 @@ function describeAutoscaling() {
   local asgName=$1
   local asgRegion=$2
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     local description=$(aws autoscaling describe-auto-scaling-groups \
           --auto-scaling-group-name $asgName --region $asgRegion)
 
@@ -137,7 +137,7 @@ function scaleUp() {
     nodeToAddCount=$(expr $maxNodeCount - $currentNodeCount)
   fi
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
           --desired-capacity $(expr $currentNodeCount + $nodeToAddCount) --region $asgRegion
 
@@ -160,7 +160,7 @@ function scaleDown() {
     return 1
   fi
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     # Get the oldest node in the ASG
     nodeName=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName \
       --sort-by='{.metadata.creationTimestamp}' | awk '{ if(NR==2) print $1 }')
