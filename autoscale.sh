@@ -65,7 +65,7 @@ function countRunningPods() {
 function getNodesRRA() {
   local labels=$1
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     nodesDescription=$(kubectl describe nodes -l $labels)
     descriptionStatus=$?
 
@@ -102,7 +102,7 @@ function describeAutoscaling() {
   local asgName=$1
   local asgRegion=$2
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     local description=$(aws autoscaling describe-auto-scaling-groups \
           --auto-scaling-group-name $asgName --region $asgRegion)
 
@@ -117,6 +117,10 @@ function getASGDesiredCapacity() {
   describeAutoscaling $1 $2 | jq '.AutoScalingGroups[].DesiredCapacity'
 }
 
+function getASGMinSize() {
+  describeAutoscaling $1 $2 | jq '.AutoScalingGroups[].MinSize'
+}
+
 function getASGMaxSize() {
   describeAutoscaling $1 $2 | jq '.AutoScalingGroups[].MaxSize'
 }
@@ -128,11 +132,12 @@ function scaleUp() {
 
   local currentNodeCount=$(getASGDesiredCapacity $asgName $asgRegion)
   local maxNodeCount=$(getASGMaxSize $asgName $asgRegion)
+
   if [ $(expr $currentNodeCount + $nodeToAddCount) -gt $maxNodeCount ]; then
     nodeToAddCount=$(expr $maxNodeCount - $currentNodeCount)
   fi
 
-  for i in $(seq 10); do
+  for i in $(seq 5); do
     aws autoscaling set-desired-capacity --auto-scaling-group-name $asgName \
           --desired-capacity $(expr $currentNodeCount + $nodeToAddCount) --region $asgRegion
 
@@ -147,41 +152,43 @@ function scaleDown() {
   local asgName=$1
   local asgRegion=$2
 
-  # Get the oldest node in the ASG
-  local nodeName=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName \
-    --sort-by='{.metadata.creationTimestamp}' | awk '{ if(NR==2) print $1 }')
+  local currentNodeCount=$(getASGDesiredCapacity $asgName $asgRegion)
+  local minNodeCount=$(getASGMinSize $asgName $asgRegion)
 
-  local nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
+  if [[ $currentNodeCount -eq $minNodeCount ]]; then
+    echo "$(date) -- Hit minimum nodes on $asgName ASG."
+    return 1
+  fi
 
-  if [[ $nodeName == "" || $nodeId == "" ]]; then
-    # If kube api requests fail, retry after 3 seconds
-    sleep 3
-
+  for i in $(seq 5); do
+    # Get the oldest node in the ASG
     nodeName=$(kubectl get nodes -l aws.autoscaling.groupName=$asgName \
       --sort-by='{.metadata.creationTimestamp}' | awk '{ if(NR==2) print $1 }')
 
     nodeId=$(kubectl describe node $nodeName | grep "ExternalID:" | awk '{ print $2 }')
 
-    if [[ $nodeName == "" || $nodeId == "" ]]; then
-      notifySlack "<!channel> Failed to scale down $asgName, no nodes found."
-      return 1
+    if [[ $nodeName != "" && $nodeId != "" ]]; then
+      aws autoscaling detach-instances --instance-ids $nodeId --auto-scaling-group-name $asgName \
+        --should-decrement-desired-capacity --region $asgRegion
+
+      if [[ $? -ne 0 ]]; then
+        echo "$(date) -- $nodeId already detached from $asgName."
+      fi
+
+      kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
+
+      sleep 30
+
+      aws ec2 terminate-instances --instance-ids $nodeId --region $asgRegion
+
+      return 0
     fi
-  fi
 
-  aws autoscaling detach-instances --instance-ids $nodeId --auto-scaling-group-name $asgName \
-    --should-decrement-desired-capacity --region $asgRegion
+    sleep 3
+  done
 
-  if [[ ! $? -eq 0 ]]; then
-    notifySlack "<!channel> Failed to detach $nodeId from $asgName, either hit minimum or node already detached."
-  fi
-
-  kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
-
-  sleep 30
-
-  aws ec2 terminate-instances --instance-ids $nodeId --region $asgRegion
-
-  return 0
+  notifySlack "<!channel> Failed to scale down $asgName, no nodes found or master unreachable."
+  return 1
 }
 
 autoscalingNoWS=$(echo "$AUTOSCALING" | tr -d "[:space:]")
@@ -202,7 +209,7 @@ function main() {
       local runningPods=$(countRunningPods $labels)
       local newNodesRequiredCount=$(expr $pendingPods \* $(getASGDesiredCapacity $asgName $asgRegion) / $runningPods + 1)
 
-      echo "Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
+      echo "$(date) -- Pending pods ($pendingPods). Scaling up $asgName ASG by $newNodesRequiredCount."
       scaleUp $asgName $asgRegion $newNodesRequiredCount
 
       if [[ $? -eq 0 ]]; then
@@ -220,13 +227,13 @@ function main() {
 
           # Only print currentRRA when previous reading doesn't exist or is different
           if [[ -z ${RRAs[$index]} || (! -z ${RRAs[$index]} && ${RRAs[$index]} -ne $currentRRA) ]]; then
-            echo "$currentRRA% RRA for $asgName."
+            echo "$(date) -- $currentRRA% RRA for $asgName."
             RRAs[$index]=$currentRRA
           fi
 
           if [[ $currentRRA -gt $maxRRA ]]; then
             local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA)
-            echo "$currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
+            echo "$(date) -- $currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
             scaleUp $asgName $asgRegion $newNodesRequiredCount
 
             if [[ $? -eq 0 ]]; then
@@ -234,7 +241,7 @@ function main() {
             fi
 
           elif [[ $currentRRA -lt $minRRA ]]; then
-            echo "$currentRRA% < $minRRA%. Scaling down $asgName."
+            echo "$(date) -- $currentRRA% < $minRRA%. Scaling down $asgName."
             scaleDown $asgName $asgRegion
 
             if [[ $? -eq 0 ]]; then
