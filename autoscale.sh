@@ -175,7 +175,7 @@ function scaleDown() {
         echo "$(date) -- $nodeId already detached from $asgName."
       fi
 
-      kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force
+      kubectl drain $nodeName --ignore-daemonsets --grace-period=90 --delete-local-data --force --timeout=480s
 
       sleep 30
 
