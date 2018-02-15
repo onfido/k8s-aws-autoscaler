@@ -232,7 +232,7 @@ function main() {
           fi
 
           if [[ $currentRRA -gt $maxRRA ]]; then
-            local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA)
+            local newNodesRequiredCount=$(expr $(expr $currentRRA - $maxRRA) \* $(getASGDesiredCapacity $asgName $asgRegion) / $maxRRA + 1)
             echo "$(date) -- $currentRRA% > $maxRRA%. Scaling up $asgName ASG by $newNodesRequiredCount."
             scaleUp $asgName $asgRegion $newNodesRequiredCount
 
