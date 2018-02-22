@@ -1,6 +1,6 @@
 #!/bin/bash
 
-notifySlack() {
+function notifySlack() {
   if [ -z "$SLACK_HOOK" ]; then
     return 0
   fi
@@ -8,7 +8,7 @@ notifySlack() {
   curl -s --retry 3 --retry-delay 3 -X POST --data-urlencode 'payload={"text": "'"$1"'"}' $SLACK_HOOK > /dev/null
 }
 
-rotateNodes() {
+function rotateNodes() {
   asgName=$1
   asgRegion=$2
 
