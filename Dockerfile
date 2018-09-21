@@ -1,4 +1,4 @@
-FROM alpine:3.6
+FROM alpine
 
 RUN apk add --update curl bash jq python py-pip bc sed \
     && pip install --upgrade pip \
