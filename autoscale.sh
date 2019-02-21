@@ -56,7 +56,7 @@ function getPods() {
 function countPendingPods() {
   # If hostIP == null then pod is Pending and not scheduled to a node.
   # If hostIP == null && deletionTimestamp != null, then the pod has hung during deletion (usually because .status.reason == NodeLost)
-  getPods $1 | jq 'select(.status.hostIP == null and .metadata.deletionTimestamp == null) | .metadata.name' | wc -l
+  getPods $1 | jq 'select(.status.hostIP == null and .metadata.deletionTimestamp == null and .status.phase != "Failed") | .metadata.name' | wc -l
 }
 
 function countRunningPods() {
